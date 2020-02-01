@@ -23,7 +23,7 @@
         } catch (Exception ex) { throw new Error(ex); }
     }
 
-	//存储int类型值的地方
+	//存储int类型值的地方，用volatile修饰，保证可见性
     private volatile int value;
 ```
 
@@ -50,7 +50,7 @@
 
 	/**
 	 * 这是Unsafe类的做法，首先获取了对象this对应的offset内存偏移的值。也就是当前值：var5。接下来在		 * while里进行判断，如果该offset内存偏移对应的值是var5，即没有被更改过，那么就更新成var5+var4
-	 * 如果没更新成功，那么就直接返回啦。
+	 * 如果没更新成功，就会一直循环。
 	 * 
 	 * 很显然，一个cas的做法，采用了乐观锁的概念。
 	 */

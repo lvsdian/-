@@ -1,6 +1,12 @@
+[TOC]
+
+
+
 #### 内部类
 
-`ReentrantLock`有3个内部类，`Sync`继承了`AQS`，`NonfairSync`和`FairSync`为`Sync`的子类。
+`ReentrantLock`有3个内部类，`Sync`继承了`AQS`，`NonfairSync`和`FairSync`为`Sync`的子类。通过构造器参数`fair`来指定使用公平锁还是非公平锁。
+
+使用公平锁时，会让活跃的线程得不到锁，进入等待状态，频繁上下文切换，从而降低整体效率
 
 ```java
     /** 
@@ -168,7 +174,7 @@
     }
 ```
 
-#### 核心方法
+#### Lock
 
 ```java
     //会调用Sync的lock方法，根据公平、非公平又有不同的实现
@@ -446,4 +452,154 @@
         }
     }
 ```
+
+
+
+#### unLock
+
+```java
+    /** ReentrantLock释放锁 */
+	public void unlock() {
+        //调用AQS中的release方法
+        sync.release(1);
+    }
+
+	//AQS中释放锁的方法
+    public final boolean release(int arg) {
+        //tryRelease尝试释放锁，如果锁都释放了返回true
+        if (tryRelease(arg)) {
+            //找到头节点(即等待队列中的下个节点)
+            Node h = head;
+            if (h != null && h.waitStatus != 0)
+                unparkSuccessor(h);
+            return true;
+        }
+        return false;
+    }
+
+	//AQS中尝试释放锁，会调用下面ReentrantLock中的实现tryRelease
+    protected boolean tryRelease(int arg) {
+        throw new UnsupportedOperationException();
+    }
+
+	//ReentrantLock中实现的tryRelease方法
+    protected final boolean tryRelease(int releases) {
+        int c = getState() - releases;
+        if (Thread.currentThread() != getExclusiveOwnerThread())
+            throw new IllegalMonitorStateException();
+        boolean free = false;
+        if (c == 0) {
+            free = true;
+            setExclusiveOwnerThread(null);
+        }
+        setState(c);
+        return free;
+    }
+
+	
+    private void unparkSuccessor(Node node) {
+       
+        int ws = node.waitStatus;
+        //如果ws<0，就用cas设为0
+        if (ws < 0)
+            compareAndSetWaitStatus(node, ws, 0);
+        //继续找到下一个要唤醒的节点s
+        Node s = node.next;
+        //s为空或被取消
+        if (s == null || s.waitStatus > 0) {
+            s = null;
+            //从后往前遍历，即找到离s最近的一个没有被取消的节点
+            for (Node t = tail; t != null && t != node; t = t.prev)
+                if (t.waitStatus <= 0)
+                    s = t;
+        }
+        if (s != null)
+            LockSupport.unpark(s.thread);
+    }
+```
+
+#### condition
+
+```java
+    //lock接口中定义newCondition方法
+    Condition newCondition();
+
+	//ReentrantLock中的实现是调用Sync对象的newCondition方法
+    public Condition newCondition() {
+        return sync.newCondition();
+    }
+
+	//sync中返回一个ConditionObject对象
+    final ConditionObject newCondition() {
+        return new ConditionObject();
+    }
+
+	//ConditionObject在AQS中作为成员内部类实现了java.util.concurrent.locks.Condition接口
+	public interface Condition {
+		
+        void await() throws InterruptedException;
+		//不会由于中断结束，但当它返回时，如果等待过程发生了中断，中断标志位会被设置
+        void awaitUninterruptibly();
+
+        long awaitNanos(long nanosTimeout) throws InterruptedException;
+
+        boolean await(long time, TimeUnit unit) throws InterruptedException;
+
+        boolean awaitUntil(Date deadline) throws InterruptedException;
+
+        void signal();
+
+        void signalAll();
+	}
+	
+
+    public final void await() throws InterruptedException {
+        //如果中断标志位已被设置，直接抛异常
+        if (Thread.interrupted())
+            throw new InterruptedException();
+        //1.为当前线程创建节点，加入条件等待队列    
+        Node node = addConditionWaiter();
+        //2.释放持有的锁
+        //获取锁的数量
+        int savedState = fullyRelease(node);
+        //中断模式，0：不中断，-1：抛异常中断，1：不抛异常，只设标志
+        int interruptMode = 0;
+        //3.放弃CPU,进行等待
+        //isOnSyncQueue为true，表示节点已被其他线程从等待队列移到外部的锁等待队列，等待的条件满足
+        while (!isOnSyncQueue(node)) {
+            //唤醒
+            LockSupport.park(this);
+            //检查中断
+            if ((interruptMode = checkInterruptWhileWaiting(node)) != 0)
+                break;
+        }
+        //4.重新获取锁
+        //会一直尝试获取锁，获取失败会挂起，直到获取，返回true表示这个过程中被中断过
+        if (acquireQueued(node, savedState) && interruptMode != THROW_IE)
+            interruptMode = REINTERRUPT;
+        if (node.nextWaiter != null) // clean up if cancelled
+            unlinkCancelledWaiters();
+        //5.处理中断，抛异常或设置中断标志位
+        if (interruptMode != 0)
+            reportInterruptAfterWait(interruptMode);
+    }
+
+    public final void signal() {
+        //验证当前线程持有锁
+        if (!isHeldExclusively())
+            throw new IllegalMonitorStateException();
+        //调用doSignal唤醒等待队列中第一个线程
+        Node first = firstWaiter;
+        if (first != null)
+            doSignal(first);  
+    }
+```
+
+调用`await`、`signal/signalAll`、`wait`、`notify/notifyAll`方法前需要获取锁，如果没有锁，会抛出`IllegalMonitorStateException`。
+
+`await`在进入等待队列后，会释放锁、CPU，当其他线程将他唤醒后，或者等待超时后，或发生中断异常后，它都需要重新获取锁，获取锁后，才会从`await`方法中退出。
+
+`notify/notifyAll`是`Object`中定义的方法，`Condition`对象也有。
+
+**显式锁与显式条件配合使用，即`await/signal/signalAll`与`Lock`配合使用，`wait/notify/notifyAll`与`synchronized`配合使用。**
 
