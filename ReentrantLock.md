@@ -1,12 +1,18 @@
-[TOC]
 
 
+* [内部类](#%E5%86%85%E9%83%A8%E7%B1%BB)
+* [属性](#%E5%B1%9E%E6%80%A7)
+* [构造方法](#%E6%9E%84%E9%80%A0%E6%96%B9%E6%B3%95)
+* [ReentrantLock\#lockLock](#reentrantlocklocklock)
+* [AQS的静态内部类\-Node](#aqs%E7%9A%84%E9%9D%99%E6%80%81%E5%86%85%E9%83%A8%E7%B1%BB-node)
+* [ReentrantLock\#unLock](#reentrantlockunlock)
+* [condition](#condition)
 
 #### 内部类
 
-`ReentrantLock`有3个内部类，`Sync`继承了`AQS`，`NonfairSync`和`FairSync`为`Sync`的子类。通过构造器参数`fair`来指定使用公平锁还是非公平锁。
+- `ReentrantLock`有3个内部类，`Sync`继承了`AQS`，`NonfairSync`和`FairSync`为`Sync`的子类。通过构造器参数`fair`来指定使用公平锁还是非公平锁。
 
-使用公平锁时，会让活跃的线程得不到锁，进入等待状态，频繁上下文切换，从而降低整体效率
+- 使用公平锁时，会让活跃的线程得不到锁，进入等待状态，频繁上下文切换，从而降低整体效率
 
 ```java
     /** 
@@ -174,10 +180,10 @@
     }
 ```
 
-#### Lock
+#### `ReentrantLock#lockLock`
 
 ```java
-    //会调用Sync的lock方法，根据公平、非公平又有不同的实现
+    //ReentrantLock的lock方法，会调用Sync的lock方法，根据公平、非公平又有不同的实现
 	public void lock() {
         sync.lock();
     }
@@ -327,7 +333,7 @@
         }
     }	
 	
-	//作用：节点node能不能去休息，取决于它的前驱节点p的转态是不是Node.SIGNAL，即会不会通知它
+	//作用：节点node能不能去休息，取决于它的前驱节点p的装态是不是Node.SIGNAL，即会不会通知它
     private static boolean shouldParkAfterFailedAcquire(Node pred, Node node) {
         //获取pred的waitStatus
         int ws = pred.waitStatus;
@@ -356,7 +362,7 @@
 
 
 
-#### AQS的静态内部类-Node
+#### `AQS`的静态内部类-`Node`
 
 ```java
     //等待队列中的节点
@@ -455,7 +461,7 @@
 
 
 
-#### unLock
+#### `ReentrantLock#unLock`
 
 ```java
     /** ReentrantLock释放锁 */
@@ -521,15 +527,15 @@
 #### condition
 
 ```java
-    //lock接口中定义newCondition方法
+    //java.util.concurrent.locks.Lock接口中定义newCondition方法
     Condition newCondition();
 
-	//ReentrantLock中的实现是调用Sync对象的newCondition方法
+	//ReentrantLock中的实现是调用抽象静态内部类Sync中的newCondition方法
     public Condition newCondition() {
         return sync.newCondition();
     }
 
-	//sync中返回一个ConditionObject对象
+	//Sync中返回一个ConditionObject对象
     final ConditionObject newCondition() {
         return new ConditionObject();
     }
@@ -552,7 +558,7 @@
         void signalAll();
 	}
 	
-
+	//ConditionObject中对await方法的实现
     public final void await() throws InterruptedException {
         //如果中断标志位已被设置，直接抛异常
         if (Thread.interrupted())
@@ -584,6 +590,7 @@
             reportInterruptAfterWait(interruptMode);
     }
 
+	//ConditionObject中对signal方法的实现
     public final void signal() {
         //验证当前线程持有锁
         if (!isHeldExclusively())
@@ -595,11 +602,12 @@
     }
 ```
 
-调用`await`、`signal/signalAll`、`wait`、`notify/notifyAll`方法前需要获取锁，如果没有锁，会抛出`IllegalMonitorStateException`。
+- 调用`await`、`signal/signalAll`、`wait`、`notify/notifyAll`方法前需要获取锁，如果没有锁，会抛出`IllegalMonitorStateException`。
 
-`await`在进入等待队列后，会释放锁、CPU，当其他线程将他唤醒后，或者等待超时后，或发生中断异常后，它都需要重新获取锁，获取锁后，才会从`await`方法中退出。
+- `await`在进入等待队列后，会释放锁、CPU，当其他线程将他唤醒后，或者等待超时后，或发生中断异常后，它都需要重新获取锁，获取锁后，才会从`await`方法中退出。
 
-`notify/notifyAll`是`Object`中定义的方法，`Condition`对象也有。
+- `notify/notifyAll`是`Object`中定义的方法，`Condition`对象也有。
 
-**显式锁与显式条件配合使用，即`await/signal/signalAll`与`Lock`配合使用，`wait/notify/notifyAll`与`synchronized`配合使用。**
+- **显式锁与显式条件配合使用，即`await/signal/signalAll`与`Lock`配合使用，`wait/notify/notifyAll`与`synchronized`配合使用。**
 
+ 
