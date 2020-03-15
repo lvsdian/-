@@ -603,11 +603,9 @@
 ```
 
 - 调用`await`、`signal/signalAll`、`wait`、`notify/notifyAll`方法前需要获取锁，如果没有锁，会抛出`IllegalMonitorStateException`。
-
 - `await`在进入等待队列后，会释放锁、CPU，当其他线程将他唤醒后，或者等待超时后，或发生中断异常后，它都需要重新获取锁，获取锁后，才会从`await`方法中退出。
-
 - `notify/notifyAll`是`Object`中定义的方法，`Condition`对象也有。
-
 - **显式锁与显式条件配合使用，即`await/signal/signalAll`与`Lock`配合使用，`wait/notify/notifyAll`与`synchronized`配合使用。**
+- **await/signal与ReentrantLock、Condition配合使用粒度更细**
 
  
