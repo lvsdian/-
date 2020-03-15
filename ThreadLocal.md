@@ -311,7 +311,9 @@ private void remove(ThreadLocal<?> key) {
 }
 ```
 
+### ThreadLocalMap为什么采用开放定址法解决冲突
 
+- ThreadLocal一般存放的数据量不会特别大，而且key又是弱引用，会被回收。这时开放定址法这种简单的结构会更节省空间，数组的查询效率也非常快。
 
 ### `ThreadLocal`内存泄露
 
